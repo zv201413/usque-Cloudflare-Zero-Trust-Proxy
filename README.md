@@ -8,7 +8,16 @@
 由于受限主机内存较小，建议直接使用编译好的二进制文件：
 1. 从 `usque_1.4.2_linux_amd64.zip` 中提取 `usque` 文件。
 2. 上传到主机的项目目录，并重命名为 `usque-bin`。
-3. 赋予执行权限：`chmod +x usque-bin`
+3. 赋予执行权限：
+```bash
+chmod +x usque-bin
+```
+```bash
+chmod +x install_gost.sh
+```
+```bash
+chmod +x manage.sh
+```
 
 ### 安装 GOST
 运行安装脚本下载并准备 `gost`：
