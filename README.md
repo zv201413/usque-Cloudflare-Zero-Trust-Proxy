@@ -27,7 +27,7 @@ chmod +x setup.sh manage.sh
 3. **获取令牌**：
    - 登录成功后，页面会显示 **Success**。
    - 按下 `F12` 键打开开发者工具，点击 **Console (控制台)**。
-   - 如果系统提示禁止粘贴，请输入 `允许粘贴`或`allow pasting` 并按回车。
+   - 如果系统提示禁止粘贴，请输入 `允许粘贴` 并按回车。
    - 复制并运行以下代码：
      ```javascript
      console.log(document.querySelector("meta[http-equiv='refresh']").content.split("=")[2])
@@ -79,6 +79,11 @@ crontab -e
 35998
 EOF
 ```
+
+## 特别鸣谢
+本项目灵感及基础思路参考了 YouTube 博主 [@闹海金蛟](https://www.youtube.com/@%E9%97%B9%E6%B5%B7%E9%87%91%E8%9B%9F) 的视频（第 931 期和 935 期）。
+
+**主要改进**：原本的思路仅生成明文 SOCKS5 链接，在公网传输存在风险。本项目在其基础上通过 `gost` 增加了“本机到主机”这一段的 Shadowsocks 加密封装，极大提升了在受限网络环境下的安全性与稳定性。
 
 ## 声明
 本项目基于 [Diniboy1123/usque](https://github.com/Diniboy1123/usque) 核心构建。
