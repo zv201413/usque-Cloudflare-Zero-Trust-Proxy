@@ -1,0 +1,12 @@
+{
+  "private_key": "2qHYvYnZqU7jtY0myaJeutZP0e5FWWDs3lCxvzlbR3cTiXQk/JCV3b1f8IYhNIoaUPs9PTf7xtQVZH7dHtqw==",
+  "endpoint_v4": "162.159.192.x",
+  "endpoint_v6": "2606:4700:x::x",
+  "endpoint_pub_key": "-----BEGIN PUBLIC KEY-----\nMR6r+/h4mcG\n7SxI8tsW8OR1A5tv/zCzVbCRRh2t87/kxnP6lAy0lkr7qYwu+ox+k3dr6w==\n-----END PUBLIC KEY-----\n",
+  "license": "",
+  "id": "t.x-11f1-9770-e6329005328d",
+  "access_token": "cad1-4a45-8ea5-c121d9ee66a5",
+  "ipv4": "100.96.x.x",
+  "ipv6": "2606:4700:110:8360:b916:x:x:x",
+  "reserved": [21, 92, 225]
+}
