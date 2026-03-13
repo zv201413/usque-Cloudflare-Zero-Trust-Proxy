@@ -39,7 +39,6 @@ get_public_ip() {
 # 获取服务器地理位置 (国家)
 get_location() {
     local country=$(curl -s -m 3 "http://ip-api.com/line?fields=country" || echo "Unknown")
-    # 清理换行符
     echo "$country" | tr -d '\n\r'
 }
 
@@ -52,16 +51,17 @@ stop_services() {
     [ -f "$PID_GOST" ] && { kill $(cat "$PID_GOST") 2>/dev/null; rm -f "$PID_GOST"; }
 }
 
-# 验证端口是否在监听
+# 验证端口是否在监听 (增加 /proc/net/tcp 基础自检)
 verify_listening() {
     local port=$1
+    local port_hex=$(printf ':%04X' "$port")
+    
     if command -v netstat > /dev/null 2>&1; then
         netstat -tuln | grep -q ":$port " && return 0
     elif command -v ss > /dev/null 2>&1; then
         ss -tuln | grep -q ":$port " && return 0
-    else
-        # 如果都没有工具，根据进程存活情况判断 (不完全准确但有用)
-        return 0
+    elif [ -r /proc/net/tcp ]; then
+        grep -qi "$port_hex" /proc/net/tcp && return 0
     fi
     return 1
 }
@@ -72,7 +72,6 @@ check_port() {
     local name=$2
     echo "正在探测 $name 端口 $port 的可用性..."
     
-    # 尝试启动一个极简监听
     timeout 2s "$GOST" -L ":$port" > .port_check.log 2>&1 &
     local probe_pid=$!
     sleep 1.5
@@ -95,7 +94,7 @@ start_interactive() {
 
     while true; do
         echo "==============================================="
-        echo "           sv66 交互式自检启动器               "
+        echo "           sv66 自动化 & 交互式启动器           "
         echo "-----------------------------------------------"
         echo "当前外网 IP: $PUB_IP ($LOCATION)"
         read -p "请输入内部通信端口 (建议 35001-35999): " INT_PORT
@@ -119,19 +118,26 @@ start_interactive() {
         rm -f "$USQUE_LOG" "$GOST_LOG"
         
         # 尝试通过 devil 开放端口 (针对 Serv00 等环境)
+        echo "正在检查系统防火墙工具..."
         if command -v devil &> /dev/null; then
-            echo "正在尝试通过 devil 开放端口 $PUB_PORT..."
-            devil port add tcp "$PUB_PORT" &> /dev/null
+            echo "检测到 devil，正在申请开放端口 $PUB_PORT..."
+            if devil port add tcp "$PUB_PORT" &> /dev/null; then
+                echo "✅ devil 端口开放指令已发送。"
+            else
+                echo "⚠️  devil 执行返回异常，可能端口已申请或超出限制。"
+            fi
+        else
+            echo "ℹ️  未检测到 devil 命令，跳过自动放行步骤。"
         fi
 
         # 1. 启动 usque
-        echo "尝试启动 usque 后端..."
+        echo "正在尝试启动 usque 后端..."
         nohup "$BINARY" socks --port "$INT_PORT" --bind 127.0.0.1 --config "$CONFIG_FILE" > "$USQUE_LOG" 2>&1 &
         echo $! > "$PID_USQUE"
         
         sleep 4
         if grep -qi "handshake failure" "$USQUE_LOG"; then
-            echo "❌ 严重错误: TLS 握手失败！请重新 register 获取 Token。"
+            echo "❌ 严重错误: TLS 握手失败！请重新 register。"
             stop_services; exit 1
         fi
         
@@ -142,7 +148,7 @@ start_interactive() {
         echo "✅ usque 隧道连接成功！"
 
         # 2. 启动 GOST
-        echo "尝试启动 GOST 出口..."
+        echo "正在尝试启动 GOST 出口..."
         nohup "$GOST" -L "ss://$SS_METHOD:$SS_PASS@:$PUB_PORT" -F "socks5://127.0.0.1:$INT_PORT" > "$GOST_LOG" 2>&1 &
         echo $! > "$PID_GOST"
         
@@ -153,11 +159,11 @@ start_interactive() {
         fi
 
         # 最终验证反馈
-        echo "正在验证端口状态..."
+        echo "正在验证端口监听状态..."
         if verify_listening "$PUB_PORT"; then
-            echo "✅ 端口 $PUB_PORT 正在监听。"
+            echo "✅ 成功: 端口 $PUB_PORT 正在监听流量。"
         else
-            echo "⚠️  警告: 端口 $PUB_PORT 似乎未开启监听。如果无法连接，请手动检查防火墙。"
+            echo "⚠️  注意: 进程已启动但系统自检未发现监听。这在某些 Docker 环境下是正常的。"
         fi
 
         # 生成节点链接
@@ -165,9 +171,9 @@ start_interactive() {
         local ss_link="ss://$auth_b64@$PUB_IP:$PUB_PORT#${LOCATION}-MASQUE"
 
         echo "-----------------------------------------------"
-        echo "🎉 所有服务已成功绑定并运行！"
+        echo "🎉 所有服务已成功启动！"
         echo "密码: $SS_PASS"
-        echo "节点链接 (彩色显示，直接复制):"
+        echo "节点链接 (直接复制):"
         echo -e "\033[32m$ss_link\033[0m"
         echo "-----------------------------------------------"
         echo "提示: 如果仍然无法连接，请确认服务商面板已放行 $PUB_PORT 端口。"
