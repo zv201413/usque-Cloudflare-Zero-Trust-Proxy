@@ -3,6 +3,7 @@ BINARY="./usque-bin"
 GOST="./gost"
 PID_USQUE="usque.pid"
 PID_GOST="gost.pid"
+CONFIG_FILE="config.json"
 
 # 默认配置
 DEFAULT_INTERNAL="35801"
@@ -17,11 +18,27 @@ is_running() {
 
 # 停止服务逻辑
 stop_services() {
-    [ -f $PID_USQUE ] && kill $(cat $PID_USQUE) 2>/dev/null && rm $PID_USQUE
-    [ -f $PID_GOST ] && kill $(cat $PID_GOST) 2>/dev/null && rm $PID_GOST
+    [ -f $PID_USQUE ] && kill $(cat $PID_USQUE) 2>/dev/null && rm -f $PID_USQUE
+    [ -f $PID_GOST ] && kill $(cat $PID_GOST) 2>/dev/null && rm -f $PID_GOST
+}
+
+# 检查配置文件
+check_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "❌ 错误: 找不到 $CONFIG_FILE。请先运行 ./manage.sh register <TOKEN>"
+        return 1
+    fi
+    # 检查 private_key 是否过短 (DER 格式通常 > 80 字符)
+    PRIV_KEY=$(grep -oP '"private_key":\s*"\K[^"]+' "$CONFIG_FILE")
+    if [ ${#PRIV_KEY} -lt 60 ]; then
+        echo "⚠️  警告: 检测到 private_key 可能不是 DER 格式。这可能导致启动失败。"
+        echo "参考 README.md 中的私钥转换方法。"
+    fi
 }
 
 start_interactive() {
+    check_config || return 1
+    
     while true; do
         echo "-----------------------------------------------"
         echo "sv66 端口范围建议: 35001 - 35999"
@@ -32,37 +49,43 @@ start_interactive() {
         PUBLIC_PORT=${PUBLIC_PORT:-$DEFAULT_PUBLIC}
         echo "-----------------------------------------------"
 
-        # 1. 尝试启动 usque
+        # 1. 启动 usque
         echo "正在尝试启动 usque (后端)..."
         rm -f usque.log
-        nohup $BINARY socks --port $INTERNAL_PORT --bind 127.0.0.1 > usque.log 2>&1 &
+        nohup $BINARY socks --port $INTERNAL_PORT --bind 127.0.0.1 --config "$CONFIG_FILE" > usque.log 2>&1 &
         echo $! > $PID_USQUE
         
-        # 等待并检查日志
-        sleep 2
-        if grep -q "address already in use" usque.log; then
+        sleep 3
+        if grep -qi "address already in use" usque.log; then
             echo "❌ 错误: 内部端口 $INTERNAL_PORT 已被占用！"
             stop_services
             continue
         fi
         
+        if grep -qi "failed to parse private key" usque.log; then
+            echo "❌ 错误: 私钥解析失败 (ASN.1 Syntax Error)！"
+            echo "请确保 config.json 中的 private_key 是 DER 格式的 Base64 字符串。"
+            stop_services
+            exit 1
+        fi
+
         if ! is_running $PID_USQUE; then
-            echo "❌ 错误: usque 启动失败，请检查 usque.log"
+            echo "❌ 错误: usque 启动失败。最近的日志内容："
+            tail -n 5 usque.log
             stop_services
             continue
         fi
         echo "✅ usque 启动成功 (127.0.0.1:$INTERNAL_PORT)"
 
-        # 2. 尝试启动 GOST
+        # 2. 启动 GOST
         echo "正在尝试启动 GOST (出口)..."
         rm -f gost.log
         nohup $GOST -L "ss://$SS_METHOD:$SS_PASS@:$PUBLIC_PORT" -F "socks5://127.0.0.1:$INTERNAL_PORT" > gost.log 2>&1 &
         echo $! > $PID_GOST
         
         sleep 2
-        # GOST v3 报错通常在 stderr，我们检查日志
-        if grep -iE "address already in use|bind: permission denied" gost.log; then
-            echo "❌ 错误: 公网端口 $PUBLIC_PORT 不可用或已被占用！"
+        if grep -qiE "address already in use|bind: permission denied" gost.log; then
+            echo "❌ 错误: 公网端口 $PUBLIC_PORT 不可用！"
             stop_services
             continue
         fi
@@ -76,7 +99,7 @@ start_interactive() {
         echo "✅ GOST 启动成功 (公网端口:$PUBLIC_PORT)"
         echo "-----------------------------------------------"
         echo "🎉 所有服务已就绪！"
-        echo "SS 节点配置: 端口 $PUBLIC_PORT, 加密 $SS_METHOD, 密码 $SS_PASS"
+        echo "SS 节点链接: ss://$(echo -n "$SS_METHOD:$SS_PASS" | base64)@你的IP:$PUBLIC_PORT#Vietnam"
         break
     done
 }
@@ -96,7 +119,7 @@ case "$1" in
         start_interactive
         ;;
     stop)
-        echo "正在停止服务..."
+        echo "停止服务..."
         stop_services
         echo "已停止。"
         ;;
