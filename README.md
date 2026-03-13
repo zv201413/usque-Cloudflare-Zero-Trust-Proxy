@@ -1,83 +1,74 @@
 # usque + GOST Cloudflare Zero Trust 代理项目
 
-本项目专为受限 Linux 环境（无 Root 权限、低内存、无标准网络工具）设计。通过 `usque` 实现 MASQUE 协议接入 Cloudflare，并使用 `gost` 提供加密入口，确保连接安全。
+本项目专为 sv66 等受限 Linux 环境设计。利用 `usque` 接入 Cloudflare MASQUE 网络，并使用 `gost` 在公网开启 Shadowsocks 加密服务。
 
-## 1. 准备工作
+## 1. 核心特性
+- **交互式启动**: 脚本会自动引导你选择可用端口。
+- **端口冲突检测**: 如果选择的端口被占用，脚本会读取日志并自动弹出提示，让你重新选择，直到成功。
+- **安全加固**: 通过 GOST 隧道将 SOCKS5 封装为 Shadowsocks (SS)，防止公网明文传输。
 
-### 获取二进制文件
-由于受限主机内存较小，建议直接使用编译好的二进制文件：
-1. 从 `usque_1.4.2_linux_amd64.zip` 中提取 `usque` 文件。
-2. 上传到主机的项目目录，并重命名为 `usque-bin`。
-3. 赋予执行权限：
-```bash
-chmod +x usque-bin
-```
-```bash
-chmod +x install_gost.sh
-```
-```bash
-chmod +x manage.sh
+## 2. 节点配置与链接
+
+**Shadowsocks (SS) 节点链接**:
+```text
+ss://YWVzLTI1Ni1nY206U2VjdXJlUGFzczEyMw==@<越南主机IP>:<你选择的端口>#Vietnam-CF-MASQUE
 ```
 
-### 安装 GOST
-运行安装脚本下载并准备 `gost`：
+- **协议**: Shadowsocks (SS)
+- **可用端口范围**: `35001 - 35999` (sv66 主机限制)
+- **加密方式**: `aes-256-gcm`
+- **密码**: `SecurePass123`
+
+---
+
+## 3. 配置文件模拟 (config.json)
+
+如果你需要手动修改或备份配置，`config.json` 的结构如下：
+
+```json
+{
+  "private_key": "x4CnJjPO0JcVwAigm9uxZ32V8LcZmptgXPQNvuYJvYo=",
+  "endpoint_v4": "162.159.192.1",
+  "endpoint_v6": "2606:4700:d0::1",
+  "endpoint_pub_key": "...",
+  "ipv6": "2606:4700:110:8360:b916:a8dd:a764:13db",
+  "reserved": [21, 92, 225]
+}
+```
+
+### 如何更新密钥配置？
+1. **自动更新**: 重新运行 `./manage.sh register <新TOKEN>`。
+2. **手动更新**: 
+   - 编辑 `config.json`。
+   - 填入你的 `private_key`、`ipv6` 地址及 `reserved` 数组。
+   - 重启服务: `./manage.sh stop && ./manage.sh start`。
+
+---
+
+## 4. 快速开始步骤
+
+### 第一步：环境准备
 ```bash
 ./install_gost.sh
+# 确保 usque-bin 已上传
+chmod +x usque-bin gost manage.sh install_gost.sh
 ```
 
----
-
-## 2. 获取 Zero Trust 令牌 (JWT)
-
-**注意：令牌有效期极短，获取后请立即执行注册命令。**
-
-1. 访问：`https://<你的团队名>.cloudflareaccess.com/warp`
-2. 完成邮箱验证登录。
-3. 看到 "Success" 页面后，按下 `F12` 打开控制台 (Console)。
-4. 如果提示“禁止粘贴”，请手动输入 `允许粘贴` (或 `allow pasting`) 并回车。
-5. 执行以下命令获取 Token：
-   ```javascript
-   console.log(document.querySelector("meta[http-equiv='refresh']").content.split("=")[2])
-   ```
-
----
-
-## 3. 注册与启动
-
-### 注册设备 (仅需一次)
+### 第二步：注册并启动
 ```bash
-./manage.sh register <你的TOKEN>
-```
-**如果提示 401 Unauthorized：**
-- 令牌已过期：请重新刷新浏览器页面并再次执行获取 Token 的 JS 代码。
-- 策略未生效：请检查 Zero Trust 后台 **Settings -> Devices -> Enrollment** 里的规则是否包含了你的邮箱。
+# 注册设备
+./manage.sh register <TOKEN>
 
-### 启动服务
-```bash
+# 交互式启动
 ./manage.sh start
 ```
-
-### 状态检查
-```bash
-./manage.sh status
-```
+*启动时，脚本会询问端口。如果端口被占用，脚本会提示你：“错误: 端口已被占用”，并要求你重新输入。*
 
 ---
 
-## 4. 客户端配置
-
-在你的手机（Shadowrocket）或电脑（Clash）中添加一个 **Shadowsocks (SS)** 节点：
-
-- **服务器地址**: 你的主机 IP
-- **端口**: `2080` (可在 manage.sh 修改)
-- **加密方式**: `aes-256-gcm`
-- **密码**: `SecurePass123` (建议在 manage.sh 中修改)
-
----
-
-## 5. 原理解析
-
-1. **入口加密 (你 <-> 主机)**：通过 `gost` 提供的 Shadowsocks 隧道，防止 SOCKS5 明文流量被运营商拦截。
-2. **中转 (主机内)**：`gost` 将流量解密后转发到本地 `1080` 端口。
-3. **出口隧道 (主机 <-> Cloudflare)**：`usque` 接收流量，通过 **MASQUE (HTTP/3)** 协议将其封装并发送至 Cloudflare 全球边缘节点。
-4. **落地**：流量从 Cloudflare 节点流出，实现代理上网。
+## 5. 故障排查
+- **401 Unauthorized**: 令牌过期或注册规则未配置。请重新刷新页面获取最新 Token。
+- **服务自动停止**: sv66 内存极小，进程可能被杀。
+- **日志分析**:
+  - `tail -f usque.log`: 查看后端连接 Cloudflare 状态。
+  - `tail -f gost.log`: 查看前端代理流量状态。
