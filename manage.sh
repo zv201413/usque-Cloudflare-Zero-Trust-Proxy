@@ -109,12 +109,60 @@ start_interactive() {
     done
 }
 
+start_socks_only() {
+    local PUB_IP=$(get_public_ip)
+    while true; do
+        echo "==============================================="
+        echo "           sv66 SOCKS5 模式 (明文)              "
+        echo "-----------------------------------------------"
+        echo "警告: 此模式不加密，仅建议在内网或临时测试使用。"
+        echo "当前外网 IP: $PUB_IP"
+        read -p "请输入 SOCKS5 监听端口 (建议 35001-35999): " SOCKS_PORT
+        SOCKS_PORT=${SOCKS_PORT:-35801}
+
+        echo "正在初始化环境..."
+        stop_services
+        chmod +x "$BINARY" 2>/dev/null
+        rm -f usque.log
+        
+        # 尝试通过 devil 开放端口
+        if command -v devil &> /dev/null; then
+            devil port add tcp $SOCKS_PORT &> /dev/null
+        fi
+
+        echo "尝试启动 usque (直连模式)..."
+        nohup $BINARY socks --port $SOCKS_PORT --bind 0.0.0.0 --config "$CONFIG_FILE" > usque.log 2>&1 &
+        echo $! > $PID_USQUE
+        
+        sleep 5
+        if grep -qi "handshake failure" usque.log; then
+            echo "❌ 严重错误: TLS 握手失败！"
+            stop_services && exit 1
+        fi
+        
+        if ! is_running $PID_USQUE; then
+            echo "❌ 失败: 端口 $SOCKS_PORT 可能被占用。"
+            stop_services && continue
+        fi
+
+        echo "-----------------------------------------------"
+        echo "🎉 SOCKS5 代理已上线！"
+        echo "地址: $PUB_IP"
+        echo "端口: $SOCKS_PORT"
+        echo "提示: 无需密码，协议请选择 SOCKS5"
+        echo "-----------------------------------------------"
+        break
+    done
+}
+
 case "$1" in
     register)
         chmod +x "$BINARY" 2>/dev/null
         $BINARY register --jwt "$2" --accept-tos ;;
     start)
         start_interactive ;;
+    start-socks)
+        start_socks_only ;;
     stop)
         stop_services && echo "已停止。" ;;
     status)
@@ -124,5 +172,5 @@ case "$1" in
         rm -f "$AUTH_FILE"
         echo "密码已重置，下次启动将生成新密码。" ;;
     *)
-        echo "用法: ./manage.sh {register|start|stop|status|new-pass}" ;;
+        echo "用法: ./manage.sh {register|start|start-socks|stop|status|new-pass}" ;;
 esac
