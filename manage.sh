@@ -24,7 +24,7 @@ get_or_create_password() {
         else
             pass=$(date +%s%N | md5sum | head -c 32)
         fi
-        [ -z "$pass" ] && pass="DefaultSecurePass123"
+        [ -z "$pass" ] && pass="DefaultPass$(date +%s)"
         echo "$pass" > "$AUTH_FILE"
         echo "$pass"
     fi
@@ -49,7 +49,7 @@ stop_services() {
 check_port() {
     local port=$1
     local name=$2
-    echo "正在预检测 $name 端口 $port..."
+    echo "正在探测 $name 端口 $port 的可用性..."
     
     # 尝试启动一个极简监听
     timeout 2s "$GOST" -L ":$port" > .port_check.log 2>&1 &
@@ -73,7 +73,7 @@ start_interactive() {
 
     while true; do
         echo "==============================================="
-        echo "           sv66 自动化 & 交互式启动器           "
+        echo "           sv66 交互式自检启动器               "
         echo "-----------------------------------------------"
         echo "当前外网 IP: $PUB_IP"
         read -p "请输入内部通信端口 (建议 35001-35999): " INT_PORT
@@ -83,46 +83,48 @@ start_interactive() {
 
         # 端口预检
         if ! check_port "$INT_PORT" "内部"; then
-            echo "❌ 失败: 内部端口 $INT_PORT 已被占用，请更换。"
+            echo "❌ 失败: 内部端口 $INT_PORT 已被占用。"
             continue
         fi
         if ! check_port "$PUB_PORT" "外部"; then
-            echo "❌ 失败: 外部端口 $PUB_PORT 已被占用，请更换。"
+            echo "❌ 失败: 外部端口 $PUB_PORT 已被占用。"
             continue
         fi
 
-        echo "正在初始化环境并启动..."
+        echo "正在准备环境并正式启动..."
         stop_services
         chmod +x "$BINARY" "$GOST" 2>/dev/null
         rm -f "$USQUE_LOG" "$GOST_LOG"
         
         # 1. 启动 usque
-        echo "尝试启动 usque (后端隧道)..."
+        echo "尝试启动 usque 后端..."
         nohup "$BINARY" socks --port "$INT_PORT" --bind 127.0.0.1 --config "$CONFIG_FILE" > "$USQUE_LOG" 2>&1 &
         echo $! > "$PID_USQUE"
         
         sleep 4
         if grep -qi "handshake failure" "$USQUE_LOG"; then
-            echo "❌ 严重错误: TLS 握手失败！请检查 config.json。"
-            stop_services; exit 1
+            echo "❌ 严重错误: TLS 握手失败！请重新 register 获取 Token。"
+            stop_services
+            exit 1
         fi
         
         if ! is_running "$PID_USQUE"; then
-            echo "❌ 失败: usque 无法启动。日志最后两行："
-            tail -n 2 "$USQUE_LOG"
-            stop_services; continue
+            echo "❌ 失败: usque 启动异常，请查看 $USQUE_LOG"
+            stop_services
+            continue
         fi
         echo "✅ usque 隧道连接成功！"
 
         # 2. 启动 GOST
-        echo "尝试启动 GOST (加密入口)..."
+        echo "尝试启动 GOST 出口..."
         nohup "$GOST" -L "ss://$SS_METHOD:$SS_PASS@:$PUB_PORT" -F "socks5://127.0.0.1:$INT_PORT" > "$GOST_LOG" 2>&1 &
         echo $! > "$PID_GOST"
         
         sleep 2
         if ! is_running "$PID_GOST"; then
-            echo "❌ 失败: GOST 启动失败。请检查日志 $GOST_LOG。"
-            stop_services; continue
+            echo "❌ 失败: GOST 启动失败。请更换外部端口。"
+            stop_services
+            continue
         fi
 
         # 生成节点链接
@@ -130,9 +132,9 @@ start_interactive() {
         local ss_link="ss://$auth_b64@$PUB_IP:$PUB_PORT#Vietnam-MASQUE"
 
         echo "-----------------------------------------------"
-        echo "🎉 代理节点已上线！"
+        echo "🎉 所有服务已成功绑定并运行！"
         echo "密码: $SS_PASS"
-        echo "节点链接 (直接复制到软件):"
+        echo "节点链接 (彩色显示，直接复制):"
         echo -e "\033[32m$ss_link\033[0m"
         echo "-----------------------------------------------"
         break
