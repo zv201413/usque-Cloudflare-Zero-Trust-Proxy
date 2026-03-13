@@ -12,8 +12,11 @@ curl -L https://raw.githubusercontent.com/zv201413/sv66.dataonline-usque-CF-Zero
 curl -L https://raw.githubusercontent.com/zv201413/sv66.dataonline-usque-CF-Zero-Trust/main/manage.sh -o manage.sh
 chmod +x setup.sh manage.sh
 
-# 运行初始化 (自动在线拉取 usque-bin 和 gost 二进制文件)
+# 运行初始化 (自动创建 usque-CFZT 文件夹并下载二进制文件)
 ./setup.sh
+
+# 进入项目目录
+cd usque-CFZT
 ```
 
 ---
