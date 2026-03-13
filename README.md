@@ -27,7 +27,7 @@ chmod +x setup.sh manage.sh
 3. **获取令牌**：
    - 登录成功后，页面会显示 **Success**。
    - 按下 `F12` 键打开开发者工具，点击 **Console (控制台)**。
-   - 如果系统提示禁止粘贴，请输入 `允许粘贴` 并按回车。
+   - 如果系统提示禁止粘贴，请输入 `允许粘贴`或`allow pasting` 并按回车。
    - 复制并运行以下代码：
      ```javascript
      console.log(document.querySelector("meta[http-equiv='refresh']").content.split("=")[2])
